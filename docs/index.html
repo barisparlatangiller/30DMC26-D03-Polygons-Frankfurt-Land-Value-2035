@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frankfurt 2035 · Land Value Scenarios</title>
+<meta name="description" content="Frankfurt's official land reference values (Bodenrichtwerte) 2022–2026 for every BORIS zone, with transparent what-if scenarios, a Monte Carlo simulation to 2035, summer heat and a 3D view.">
+<meta property="og:title" content="Frankfurt 2035 · Land Value Scenarios">
+<meta property="og:description" content="1,466 BORIS zones, three official value years and four what-if scenarios to 2035, in 2D and 3D.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+  <main class="mapwrap">
+    <div id="map" aria-label="Map of Frankfurt land value zones"></div>
+    <div class="card legend-card" id="legend" aria-live="polite"></div>
+
+    <div class="card mapbar" id="mapbar">
+      <div class="seg seg2 mini" id="viewSeg" role="tablist" aria-label="View">
+        <button data-view="2d" class="on">▦ Flat</button>
+        <button data-view="3d">⬢ 3D</button>
+      </div>
+      <button class="pill" id="playBtn" title="Animate 2022 → 2035">▶ Play 2022–2035</button>
+      <button class="pill" id="heatBtn" aria-pressed="false" title="Summer surface temperature (Landsat)">🌡 Heat layer</button>
+      <label class="op"><span>Zones</span><input type="range" id="opac" min="20" max="100" value="85" aria-label="Zone opacity"></label>
+    </div>
+
+    <div id="tip" class="tip" hidden></div>
+    <div id="loading" class="loading">Loading 1,466 BORIS zones…</div>
+
+    <div class="intro card" id="intro" hidden>
+      <p class="eyebrow">Welcome</p>
+      <h2>Frankfurt 2035: a scenario explorer</h2>
+      <ol class="steps">
+        <li><b>Every polygon is a BORIS zone</b> with its official land reference value (Bodenrichtwert, €/m²) for 2022, 2024 and 2026.</li>
+        <li><b>Pick a year.</b> For 2028, 2030 and 2035, choose a scenario: no change, half the past trend, the full trend, your own rate, or a simulation with a range.</li>
+        <li><b>Switch to 3D</b> to see values as heights, add the <b>heat layer</b>, and click a zone for its full story.</li>
+      </ol>
+      <p class="hint" style="margin:0 0 14px">Scenarios are what-if calculations with stated assumptions, <b>not forecasts</b>. Reference values are not sale prices.</p>
+      <button class="primary" id="introGo">Start exploring</button>
+    </div>
+  </main>
+
+  <aside class="panel card" id="panel">
+    <header class="head">
+      <p class="eyebrow">#30DayMapChallenge · Day 3 · Polygons · Frankfurt</p>
+      <h1>Frankfurt 2035: where could land values go?</h1>
+      <p class="lede" id="lede"></p>
+    </header>
+
+    <section class="block" id="detail" hidden></section>
+
+    <section class="block">
+      <h2 class="label">1 · Year</h2>
+      <div class="years" id="yearSeg">
+        <span class="yl">official</span><span class="yl fut">scenario</span>
+        <button data-y="2022">2022</button><button data-y="2024">2024</button><button data-y="2026" class="on">2026</button>
+        <button data-y="2028" class="fut">2028</button><button data-y="2030" class="fut">2030</button><button data-y="2035" class="fut">2035</button>
+      </div>
+    </section>
+
+    <section class="block" id="modelBlock">
+      <h2 class="label">2 · Scenario for 2028–2035</h2>
+      <div class="models" id="modelSeg">
+        <button data-m="m1"><b>M1</b> Stagnation<small>r = 0</small></button>
+        <button data-m="m2"><b>M2</b> Dampened trend<small>r = ½ × CAGR 22–26</small></button>
+        <button data-m="m3" class="on"><b>M3</b> Trend continues<small>r = CAGR 22–26</small></button>
+        <button data-m="m4"><b>M4</b> Your rate<small>r = <span id="m4v">2.0</span> %/yr</small></button>
+        <button data-m="sim" class="wide"><b>Simulation</b> 1,000 runs<small>range of outcomes</small></button>
+      </div>
+      <div class="ctl" id="m4row"><span>M4 yearly rate</span><input type="range" id="m4" min="-6" max="8" step="0.5" value="2"><b id="m4o" class="mono">+2.0 %</b></div>
+      <div class="seg seg3 mini" id="pSeg" hidden>
+        <button data-p="10">P10 low</button><button data-p="50" class="on">P50 median</button><button data-p="90">P90 high</button>
+      </div>
+      <div class="ctl heatctl" id="heatRow"><span>Heat what-if<small>extra yearly change in the hottest third of zones</small></span><input type="range" id="hadj" min="-3" max="3" step="0.5" value="0"><b id="hadjo" class="mono">±0.0 pp</b></div>
+      <p class="hint" id="modelHint"></p>
+    </section>
+
+    <section class="block">
+      <h2 class="label">3 · Land use &amp; colour</h2>
+      <div class="seg seg5" id="useSeg">
+        <button data-g="all" class="on">All</button><button data-g="W">Residential</button><button data-g="M">Mixed</button><button data-g="G">Commercial</button><button data-g="O">Other</button>
+      </div>
+      <div class="seg seg2" id="colSeg" style="margin-top:8px">
+        <button data-c="value" class="on">Value €/m²</button><button data-c="change">Change %</button>
+      </div>
+      <p class="hint" id="colHint"></p>
+    </section>
+
+    <section class="block">
+      <h2 class="label">What happened 2022–2026</h2>
+      <table class="gtab" id="gtab"></table>
+      <p class="hint">Median Bodenrichtwert of the zones of each use (€/m²) and median change of zones with a matched 2022 value.</p>
+    </section>
+
+    <section class="block">
+      <h2 class="label">Scenario fan · <span id="fanName">Residential</span></h2>
+      <svg id="fan" class="fan" viewBox="0 0 330 190" role="img" aria-label="Fan chart"></svg>
+      <p class="hint" id="fanHint"></p>
+    </section>
+
+    <section class="block" id="heatBlock">
+      <h2 class="label">Heat and land value</h2>
+      <div id="heatTxt"></div>
+    </section>
+
+    <section class="block">
+      <h2 class="label">Methodology &amp; research</h2>
+      <details class="howto" open>
+        <summary>Research basis &amp; scenario method</summary>
+        <p>This project examines spatial changes in Frankfurt's officially published land reference values (Bodenrichtwerte) for 2022, 2024 and 2026.</p>
+        <p>The spatial approach — using BORIS value zones as the unit of analysis — is informed by <b>Siedentop &amp; Schartmann (2025)</b>, who study urban land-value change in North Rhine-Westphalia with official BORIS data. Research on statistical land valuation (<b>Kolbe et al., 2019</b>) and on urban land price dynamics (<b>Fitzgerald et al., 2020</b>) gives context for valuation methods and for why land prices are volatile and should not be extrapolated with confidence.</p>
+        <p>Future values for 2028, 2030 and 2035 are <b>exploratory scenarios, not forecasts</b>: BRW<sub>year</sub> = BRW<sub>2026</sub> × (1 + r)<sup>year − 2026</sup>, with r = 0 (M1), ½ × CAGR<sub>22–26</sub> (M2), CAGR<sub>22–26</sub> (M3) or a user rate (M4). M2 and M3 are only computed where a 2022 value could be matched. None of the cited studies validates these coefficients; they are transparent assumptions.</p>
+        <p><b>Simulation.</b> 1,000 Monte Carlo runs per zone. Yearly growth = μ + δ + σ·(0.5 z<sub>year</sub> + 0.7 ε<sub>zone,year</sub>), where μ blends the zone's own CAGR with the median of its land-use group (½ / ½), δ ~ N(0, 2.5 %/yr) is a persistent trend uncertainty per run and group, and σ is the robust spread of zone CAGRs in the group. The map shows the P10, P50 or P90 value; the fan chart the median zone of a group.</p>
+        <p><b>Heat what-if.</b> Zones are split into thirds by mean summer land-surface temperature (Landsat 8/9, clear days June–August 2022–2025). The slider adds or removes growth in the hottest third. It is a sensitivity test, not evidence that heat moves land values.</p>
+      </details>
+      <details class="howto">
+        <summary>References</summary>
+        <ol class="refs">
+          <li>Siedentop, S. &amp; Schartmann, M. (2025). Reurbanization and spatially polarized land markets. <i>Raumforschung und Raumordnung | Spatial Research and Planning</i> 83(4). <a href="https://doi.org/10.14512/rur.2975">doi:10.14512/rur.2975</a></li>
+          <li>Kolbe, J., Schulz, R., Wersing, M. &amp; Werwatz, A. (2019). Bodenwertermittlung mit statistischen Methoden. <i>Zeitschrift für Immobilienökonomie</i> 5(1). <a href="https://doi.org/10.1365/s41056-019-00038-9">doi:10.1365/s41056-019-00038-9</a></li>
+          <li>Fitzgerald, M., Hansen, D. J., McIntosh, W. &amp; Slade, B. A. (2020). Urban land: price indices, performance, and leading indicators. <i>Journal of Real Estate Finance and Economics</i>. <a href="https://doi.org/10.1007/s11146-019-09696-x">doi:10.1007/s11146-019-09696-x</a></li>
+          <li>Hessisches Landesamt für Bodenmanagement und Geoinformation: Bodenrichtwerte (BORIS Hessen), Stichtage 01.01.2022, 01.01.2024, 01.01.2026. <a href="https://hvbg.hessen.de/immobilienwertermittlung/bodenrichtwerte">hvbg.hessen.de</a></li>
+          <li>Stadt Frankfurt am Main, Gutachterausschuss für Immobilienwerte: Immobilienmarktbericht (official market context).</li>
+        </ol>
+      </details>
+      <details class="howto">
+        <summary>Data quality &amp; limits</summary>
+        <p id="dq"></p>
+        <p>A Bodenrichtwert is an official reference value for land in a zone under stated conditions (use, development state, floor-area ratio). It is <b>not a transaction price</b> and not the value of a single plot.</p>
+        <p>2022 and 2024 values are matched to the 2026 zones by <b>zone number and land-use code</b>. The 2022/2024 sources are attribute tables; whether zone boundaries stayed the same is <b>not verified</b>, so changes of individual zones should be read with care.</p>
+        <p>Land-surface temperature describes how hot surfaces get around 10:30 on clear summer days, not air temperature.</p>
+      </details>
+      <div class="dl" id="downloads"></div>
+    </section>
+
+    <footer class="foot">
+      <p><b>Data &amp; licences.</b> Bodenrichtwerte © Hessisches Landesamt für Bodenmanagement und Geoinformation / Gutachterausschuss Frankfurt am Main (BORIS Hessen, <a href="https://www.govdata.de/dl-de/zero-2-0">dl-de/zero-2-0</a>). Landsat 8/9 Collection 2 Level-2 courtesy of the U.S. Geological Survey, via Microsoft Planetary Computer. Basemap © <a href="https://carto.com/attribution">CARTO</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</p>
+      <p>Barış Parlatangiller · <a href="https://github.com/barisparlatangiller" id="repoLink">source &amp; method</a> · built with AI assistance (Claude, Anthropic)</p>
+    </footer>
+  </aside>
+</div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
