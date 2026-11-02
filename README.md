@@ -13,7 +13,7 @@ The map lets you:
 - choose a land use: residential, mixed, commercial, other, or all
 - choose a scenario model (M1–M4 or the simulation)
 - colour zones by value or by change
-- switch between a flat map and a **3D view**, where height grows with €/m²
+- switch between a flat map and **3D buildings**: every LoD2 building in Frankfurt at its measured height, coloured by the land use, land value or scenario of the BORIS zone it stands in, or by its own use from the cadastre
 - add a summer **heat** layer
 - click a zone to see its values, its growth rates, every scenario and the simulation range
 
@@ -62,12 +62,18 @@ None of these studies validates the M1–M4 coefficients; they are transparent a
 - **Symbolic values:** values below 1 €/m² (0.01 €/m² on public land) are excluded from growth statistics.
 - **Heat:** land-surface temperature is the temperature of surfaces around 10:30 on clear days, not air temperature. Hot zones are mostly dense and central, so heat and location overlap.
 
+## 3D buildings
+
+The 3D view uses the official **3D-Gebäudemodelle LoD2** of Hessen (HVBG, Geodaten online, Kreisfreie Stadt Frankfurt). `pipeline/lod2_to_buildings.py` reads each building and building part from the CityGML: its footprint (GroundSurface), its measured height and its ALKIS building function. `pipeline/build_buildings.py` then gives every footprint the BORIS zone it stands in and writes vector tiles. The colours show **land** values of the zone, not the value of the building.
+
 ## Build
 
 ```bash
 pip install -r requirements.txt
 python pipeline/build_heat.py     # Landsat LST → input/lst_summer.tif, docs/data/heat.png
 python pipeline/build_zones.py    # zones, CAGR, simulation, heat per zone → docs/data
+python pipeline/fetch_lod2.py     # HVBG LoD2 package for Frankfurt (~0.5 GB)
+python pipeline/lod2_to_buildings.py && python pipeline/build_buildings.py   # needs tippecanoe
 ```
 
 The GitHub Action (`.github/workflows/build-and-deploy.yml`) runs both steps and publishes `docs/` to GitHub Pages. It also writes the result files (GeoPackage, CSV, GeoTIFF) to the `data` branch.
@@ -78,6 +84,7 @@ The GitHub Action (`.github/workflows/build-and-deploy.yml`) runs both steps and
   - Source: © Hessisches Landesamt für Bodenmanagement und Geoinformation (HVBG) / Gutachterausschuss für Immobilienwerte Frankfurt am Main, BORIS Hessen.
   - Licence: [dl-de/zero-2-0](https://www.govdata.de/dl-de/zero-2-0).
   - Files: `data/` holds the Frankfurt extract and the original 2026 XML.
+- **3D-Gebäudemodelle LoD2:** © Hessische Verwaltung für Bodenmanagement und Geoinformation (HVBG), free download via Geodaten online.
 - **Landsat 8/9 Collection 2 Level-2:** courtesy of the U.S. Geological Survey (public domain), via the Microsoft Planetary Computer.
 - **Basemap:** © CARTO, © OpenStreetMap contributors.
 

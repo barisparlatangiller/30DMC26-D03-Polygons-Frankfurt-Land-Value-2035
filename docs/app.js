@@ -14,6 +14,9 @@
   const CB = [-0.3, -0.15, -0.05, -0.01, 0.01, 0.05, 0.15, 0.3];
   const CC = ["#7a1f3d", "#c2456a", "#ec9bb0", "#f6d6de", "#ece8df", "#cfe6e2", "#86c6bd", "#2f9488", "#145b55"];
   const NA = "#dcd7cd";
+  const UC = { W: "#e4a33a", M: "#c75b7a", G: "#4f78c4", O: "#9db58a" };                      // zone land use
+  const BN = { res: "Residential", com: "Commerce & offices", pub: "Public & community", ind: "Industry & utilities", gar: "Garages & parking", oth: "Other structures" };
+  const BC = { res: "#e4a33a", com: "#4f78c4", pub: "#8a63c2", ind: "#6e6a66", gar: "#b9b2a6", oth: "#d6d0c4" };
   const HEAT_NAMES = ["cooler third", "middle third", "hottest third"];
 
   const state = { year: 2026, model: "m3", u: 2, p: "50", hadj: 0, grp: "all", col: "value", view: "2d", heat: false, opac: 0.85, sel: null };
@@ -63,9 +66,17 @@
     if (state.model === "sim") return ["has", `s${String(y).slice(2)}${state.p}`];
     return [">=", valueExpr(), 0];
   }
-  function colorExpr() {
+  function colorExpr(forBuildings = false) {
+    if (state.col === "zuse") return ["match", ["get", "g"], "W", UC.W, "M", UC.M, "G", UC.G, "O", UC.O, NA];
+    if (state.col === "buse") return forBuildings ? ["match", ["get", "c"], ...Object.entries(BC).flat(), NA] : (document.documentElement.dataset.dark ? "#3a3833" : "#ebe7df");
     const v = valueExpr();
-    if (state.col === "change" && state.year !== 2022) {
+    if (state.col === "zuse") {
+      h = `<div class="lg-title">Land use of the BORIS zone</div><div class="lg-sub">${state.view === "3d" ? "buildings coloured by the zone they stand in" : "zones"}</div>` +
+        Object.entries(UC).map(([k, c]) => `<div class="lg-row"><i class="sq" style="background:${c}"></i>${GN[k]}<small>${fmt(S.groups[k].n)} zones${S.buildings && S.buildings.by_zone_use[k] ? " · " + fmt(S.buildings.by_zone_use[k].n) + " buildings, median " + fmt(S.buildings.by_zone_use[k].h_median, 0) + " m" : ""}</small></div>`).join("");
+    } else if (state.col === "buse") {
+      h = `<div class="lg-title">Building use (cadastre)</div><div class="lg-sub">${state.view === "3d" ? "LoD2 buildings at measured height" : "switch to 3D buildings to see them"}</div>` +
+        Object.entries(BC).map(([k, c]) => `<div class="lg-row"><i class="sq" style="background:${c}"></i>${BN[k]}<small>${S.buildings && S.buildings.by_cat[k] ? fmt(S.buildings.by_cat[k]) : ""}</small></div>`).join("");
+    } else if (state.col === "change" && state.year !== 2022) {
       const base = future() ? ["get", "v26"] : ["get", "v22"];
       const ok = future() ? hasExpr() : ["all", ["has", "v22"], hasExpr()];
       const ch = ["-", ["/", v, base], 1];
@@ -75,14 +86,15 @@
     const e = ["step", ["coalesce", v, 0], VC[0]]; VB.forEach((b, i) => e.push(b, VC[i + 1]));
     return ["case", hasExpr(), e, NA];
   }
-  function heightExpr() {
-    return ["case", hasExpr(), ["*", 90, ["ln", ["+", 1, ["/", ["max", valueExpr(), 0], 50]]]], 0];
-  }
+
   function filterExpr() { return state.grp === "all" ? null : ["==", ["get", "g"], state.grp]; }
 
   // ------------------------------------------------------------------ map
   function initMap() {
     const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    if (dark) document.documentElement.dataset.dark = "1";
+    const protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
     map = new maplibregl.Map({
       container: "map", hash: true, maxPitch: 70, attributionControl: { compact: true },
       center: [8.64, 50.12], zoom: 10.7, minZoom: 9, maxZoom: 18,
@@ -105,9 +117,11 @@
       map.addLayer({ id: "zf", type: "fill", source: "z", paint: { "fill-color": colorExpr(), "fill-opacity": state.opac } });
       map.addLayer({ id: "zl", type: "line", source: "z", paint: { "line-color": dark ? "#111" : "#fff",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.2, 14, 1], "line-opacity": 0.7 } });
-      map.addLayer({ id: "z3", type: "fill-extrusion", source: "z", layout: { visibility: "none" },
-        paint: { "fill-extrusion-color": colorExpr(), "fill-extrusion-height": heightExpr(), "fill-extrusion-base": 0,
-                 "fill-extrusion-opacity": 0.9, "fill-extrusion-vertical-gradient": true } });
+      if (S.buildings) map.addSource("bld", { type: "vector", url: "pmtiles://" + new URL("data/buildings.pmtiles", location.href).href });
+      else map.addSource("bld", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer(Object.assign({ id: "b3", type: "fill-extrusion", source: "bld", minzoom: 12, layout: { visibility: "none" },
+        paint: { "fill-extrusion-color": colorExpr(true), "fill-extrusion-height": ["get", "h"], "fill-extrusion-base": 0,
+                 "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } }, S.buildings ? { "source-layer": "b" } : {}));
       map.addLayer({ id: "zh", type: "line", source: "z", filter: ["==", ["get", "i"], -1],
         paint: { "line-color": dark ? "#fff" : "#1f1d1a", "line-width": 2.5 } });
       labels.forEach((id) => map.moveLayer(id));
@@ -124,13 +138,12 @@
     if (!map || !map.getLayer("zf")) return;
     const c = colorExpr(), f = filterExpr();
     map.setPaintProperty("zf", "fill-color", c);
-    map.setPaintProperty("zf", "fill-opacity", state.view === "3d" ? 0 : state.opac);
-    map.setPaintProperty("z3", "fill-extrusion-color", c);
-    map.setPaintProperty("z3", "fill-extrusion-height", heightExpr());
-    map.setPaintProperty("z3", "fill-extrusion-opacity", Math.max(0.5, state.opac));
-    map.setLayoutProperty("z3", "visibility", state.view === "3d" ? "visible" : "none");
-    map.setLayoutProperty("zl", "visibility", state.view === "3d" ? "none" : "visible");
-    ["zf", "zl", "z3"].forEach((l) => map.setFilter(l, f));
+    const b3 = state.view === "3d";
+    map.setPaintProperty("zf", "fill-opacity", b3 ? Math.min(0.35, state.opac) : state.opac);
+    map.setPaintProperty("b3", "fill-extrusion-color", colorExpr(true));
+    map.setPaintProperty("b3", "fill-extrusion-opacity", Math.max(0.6, state.opac));
+    map.setLayoutProperty("b3", "visibility", b3 ? "visible" : "none");
+    ["zf", "zl", "b3"].forEach((l) => map.setFilter(l, f));
     if (map.getLayer("heat")) map.setPaintProperty("heat", "raster-opacity", state.heat ? 0.7 : 0);
     document.querySelectorAll("#yearSeg button").forEach((b) => b.classList.toggle("on", +b.dataset.y === state.year));
     document.querySelectorAll("#modelSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === state.model));
@@ -147,7 +160,8 @@
     $("#m4o").textContent = (state.u > 0 ? "+" : "") + fmt(state.u, 1) + " %";
     $("#hadjo").textContent = (state.hadj > 0 ? "+" : state.hadj < 0 ? "" : "±") + fmt(state.hadj, 1) + " pp";
     $("#modelHint").innerHTML = future() ? modelHint() : "Scenarios apply to 2028, 2030 and 2035. Pick one of those years.";
-    $("#colHint").textContent = state.col === "change"
+    $("#colHint").textContent = state.col === "zuse" ? "Land use of the BORIS zone (Bodenrichtwert use class). In 3D, every building takes the colour of the zone it stands in."
+      : state.col === "buse" ? "Use of each building from the cadastre (ALKIS building function). Switch to 3D buildings to see it." : state.col === "change"
       ? (state.year === 2022 ? "2022 is the start year — showing values." : future() ? `Change from 2026 to ${state.year}.` : `Change from 2022 to ${state.year} (zones with a matched 2022 value).`)
       : "Official reference value (or scenario value) in € per m² of land.";
     legend(); fan();
@@ -163,8 +177,8 @@
 
   function bind() {
     const tip = $("#tip");
-    let hover = null;
-    const layer = () => (state.view === "3d" ? "z3" : "zf");
+    let hoverB = false, clickB = false;
+    const layer = () => "zf";
     const move = (e) => {
       const f = e.features[0], p = f.properties;
       map.getCanvas().style.cursor = "pointer";
@@ -175,10 +189,24 @@
       const r = $("#map").getBoundingClientRect();
       tip.style.left = Math.min(e.point.x, r.width - tip.offsetWidth - 30) + "px"; tip.style.top = e.point.y + "px";
     };
-    ["zf", "z3"].forEach((l) => {
-      map.on("mousemove", l, (e) => { if (l === layer()) move(e); });
+    map.on("mousemove", "b3", (e) => {
+      const p = e.features[0].properties; map.getCanvas().style.cursor = "pointer";
+      const v = p.v26 != null ? valueOf(p) : null;
+      tip.innerHTML = `<b>${BN[p.c] || "Building"}</b> · ${fmt(p.h, 0)} m<br><small>${p.g ? GN[p.g] + " zone" : "no BORIS zone"}${v != null ? ` · ${state.year}: ${fmt(v)} €/m²` : ""}</small>`;
+      tip.hidden = false; const r = $("#map").getBoundingClientRect();
+      tip.style.left = Math.min(e.point.x, r.width - tip.offsetWidth - 30) + "px"; tip.style.top = e.point.y + "px";
+      hoverB = true;
+    });
+    map.on("mouseleave", "b3", () => { hoverB = false; tip.hidden = true; map.getCanvas().style.cursor = ""; });
+    map.on("click", "b3", (e) => {
+      const p = e.features[0].properties; clickB = true;
+      popup.setLngLat(e.lngLat).setHTML(buildingHTML(p)).addTo(map);
+      if (p.zi != null) showZone(p.zi);
+    });
+    ["zf"].forEach((l) => {
+      map.on("mousemove", l, (e) => { if (!hoverB) move(e); });
       map.on("mouseleave", l, () => { tip.hidden = true; map.getCanvas().style.cursor = ""; });
-      map.on("click", l, (e) => { if (l !== layer()) return; const p = e.features[0].properties; showZone(p.i); popup.setLngLat(e.lngLat).setHTML(zoneHTML(p)).addTo(map); });
+      map.on("click", l, (e) => { if (clickB) { clickB = false; return; } const p = e.features[0].properties; showZone(p.i); popup.setLngLat(e.lngLat).setHTML(zoneHTML(p)).addTo(map); });
     });
   }
 
@@ -226,6 +254,17 @@
       <table class="ptab">${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")}</table>
       ${p.all ? `<small>${esc(p.all)}</small>` : ""}${p.rm ? `<small>Note: ${esc(p.rm)}</small>` : ""}</div>`;
   }
+  function buildingHTML(p) {
+    const v = p.v26 != null ? valueOf(p) : null;
+    const rows = [["Height (LoD2, measured)", `${fmt(p.h, 1)} m`], ["Building use", `${BN[p.c] || "–"}${p.fn ? ` <small>(ALKIS ${esc(p.fn)})</small>` : ""}`]];
+    if (p.g) {
+      rows.push(["Zone land use", `${esc(GN[p.g])}${p.u ? ` <small>(${esc(p.u)})</small>` : ""}`]);
+      rows.push(["Land value 2022 · 24 · 26", `${fmt(p.v22)} · ${fmt(p.v24)} · ${fmt(p.v26)} €/m²`]);
+      if (future()) rows.push([`${state.year} · ${MN[state.model]}`, v == null ? "not computed" : `${fmt(v)} €/m² <small>(${pct(v / p.v26 - 1)})</small>`]);
+    }
+    return `<div class="pop"><b style="font-size:15px">${BN[p.c] || "Building"} · ${fmt(p.h, 0)} m</b><small>Values are those of the BORIS zone the building stands in (land, not the building).</small>
+      <table class="ptab">${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")}</table></div>`;
+  }
   function showZone(i, scroll = true) {
     state.sel = i;
     const p = byId(i);
@@ -254,7 +293,7 @@
     document.querySelectorAll("#colSeg button").forEach((b) => b.onclick = () => { state.col = b.dataset.c; render(); });
     document.querySelectorAll("#viewSeg button").forEach((b) => b.onclick = () => {
       state.view = b.dataset.view;
-      if (state.view === "3d") map.easeTo({ pitch: 58, bearing: -18, zoom: Math.max(map.getZoom(), 11.2), duration: 1000 });
+      if (state.view === "3d") map.easeTo({ pitch: 60, bearing: -20, zoom: Math.max(map.getZoom(), 14.2), duration: 1200 });
       else map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
       render();
     });
@@ -333,7 +372,13 @@
     const L = $("#legend");
     const title = `${state.year}${future() ? " · " + MN[state.model] + (state.model === "sim" ? " P" + state.p : "") : " · official"}`;
     let h = "";
-    if (state.col === "change" && state.year !== 2022) {
+    if (state.col === "zuse") {
+      h = `<div class="lg-title">Land use of the BORIS zone</div><div class="lg-sub">${state.view === "3d" ? "buildings coloured by the zone they stand in" : "zones"}</div>` +
+        Object.entries(UC).map(([k, c]) => `<div class="lg-row"><i class="sq" style="background:${c}"></i>${GN[k]}<small>${fmt(S.groups[k].n)} zones${S.buildings && S.buildings.by_zone_use[k] ? " · " + fmt(S.buildings.by_zone_use[k].n) + " buildings, median " + fmt(S.buildings.by_zone_use[k].h_median, 0) + " m" : ""}</small></div>`).join("");
+    } else if (state.col === "buse") {
+      h = `<div class="lg-title">Building use (cadastre)</div><div class="lg-sub">${state.view === "3d" ? "LoD2 buildings at measured height" : "switch to 3D buildings to see them"}</div>` +
+        Object.entries(BC).map(([k, c]) => `<div class="lg-row"><i class="sq" style="background:${c}"></i>${BN[k]}<small>${S.buildings && S.buildings.by_cat[k] ? fmt(S.buildings.by_cat[k]) : ""}</small></div>`).join("");
+    } else if (state.col === "change" && state.year !== 2022) {
       h = `<div class="lg-title">Change ${future() ? "2026 → " + state.year : "2022 → " + state.year}</div><div class="lg-sub">${title}${state.grp !== "all" ? " · " + GN[state.grp] : ""}</div>
         <div class="lg-bar" style="background:linear-gradient(90deg,${CC.join(",")})"></div><div class="lg-ticks"><span>−30 %</span><span>−5</span><span>0</span><span>+5</span><span>+30 %</span></div>`;
     } else {
@@ -341,8 +386,8 @@
         <div class="vsteps">${VC.map((c, i) => `<i style="background:${c}"></i>`).join("")}</div>
         <div class="vticks">${["", ...VB].map((b) => `<span>${b === "" ? "" : b >= 1000 ? b / 1000 + "k" : b}</span>`).join("")}</div>`;
     }
-    h += `<div class="lg-row"><i class="sq" style="background:${NA}"></i>no value / not computed for this scenario</div>`;
-    if (state.view === "3d") h += `<div class="hint lg-note">3D: height grows with the value (log scale), so a 35,000 €/m² centre zone is not 35× taller than a 1,000 €/m² one.</div>`;
+    if (state.col === "value" || state.col === "change") h += `<div class="lg-row"><i class="sq" style="background:${NA}"></i>no value / not computed for this scenario</div>`;
+    if (state.view === "3d") h += `<div class="hint lg-note">3D: ${S.buildings ? fmt(S.buildings.n) + " " : ""}LoD2 buildings at their measured height. ${state.col === "value" || state.col === "change" ? "Each building shows the land value of the zone it stands in — land, not the building." : ""} Zoom in to street level.</div>`;
     if (state.heat && HEAT) h += `<div class="lg-sel"><div class="lg-title" style="font-size:12px">Summer surface temperature</div><div class="lg-bar" style="background:linear-gradient(90deg,${HEAT.scale.stops.map(([t, c]) => `${c} ${t * 100}%`).join(",")})"></div><div class="lg-ticks"><span>${fmt(HEAT.scale.lo, 0)} °C</span><span>${fmt(HEAT.scale.hi, 0)} °C</span></div></div>`;
     L.innerHTML = h;
   }

@@ -6,7 +6,7 @@
 <title>Frankfurt 2035 · Land Value Scenarios</title>
 <meta name="description" content="Frankfurt's official land reference values (Bodenrichtwerte) 2022–2026 for every BORIS zone, with transparent what-if scenarios, a Monte Carlo simulation to 2035, summer heat and a 3D view.">
 <meta property="og:title" content="Frankfurt 2035 · Land Value Scenarios">
-<meta property="og:description" content="1,466 BORIS zones, three official value years and four what-if scenarios to 2035, in 2D and 3D.">
+<meta property="og:description" content="1,466 BORIS zones, three official value years, four what-if scenarios to 2035 and every Frankfurt building in 3D.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
     <div class="card mapbar" id="mapbar">
       <div class="seg seg2 mini" id="viewSeg" role="tablist" aria-label="View">
         <button data-view="2d" class="on">▦ Flat</button>
-        <button data-view="3d">⬢ 3D</button>
+        <button data-view="3d">⬢ 3D buildings</button>
       </div>
       <button class="pill" id="playBtn" title="Animate 2022 → 2035">▶ Play 2022–2035</button>
       <button class="pill" id="heatBtn" aria-pressed="false" title="Summer surface temperature (Landsat)">🌡 Heat layer</button>
@@ -38,7 +38,7 @@
       <ol class="steps">
         <li><b>Every polygon is a BORIS zone</b> with its official land reference value (Bodenrichtwert, €/m²) for 2022, 2024 and 2026.</li>
         <li><b>Pick a year.</b> For 2028, 2030 and 2035, choose a scenario: no change, half the past trend, the full trend, your own rate, or a simulation with a range.</li>
-        <li><b>Switch to 3D</b> to see values as heights, add the <b>heat layer</b>, and click a zone for its full story.</li>
+        <li><b>Switch to 3D buildings</b>: every real building (LoD2) stands at its measured height and takes the land use and land value of its zone. Add the <b>heat layer</b>, click a zone or a building for its full story.</li>
       </ol>
       <p class="hint" style="margin:0 0 14px">Scenarios are what-if calculations with stated assumptions, <b>not forecasts</b>. Reference values are not sale prices.</p>
       <button class="primary" id="introGo">Start exploring</button>
@@ -85,8 +85,8 @@
       <div class="seg seg5" id="useSeg">
         <button data-g="all" class="on">All</button><button data-g="W">Residential</button><button data-g="M">Mixed</button><button data-g="G">Commercial</button><button data-g="O">Other</button>
       </div>
-      <div class="seg seg2" id="colSeg" style="margin-top:8px">
-        <button data-c="value" class="on">Value €/m²</button><button data-c="change">Change %</button>
+      <div class="seg seg4" id="colSeg" style="margin-top:8px">
+        <button data-c="value" class="on">Value €/m²</button><button data-c="change">Change %</button><button data-c="zuse">Zone use</button><button data-c="buse">Building use</button>
       </div>
       <p class="hint" id="colHint"></p>
     </section>
@@ -139,12 +139,13 @@
     </section>
 
     <footer class="foot">
-      <p><b>Data &amp; licences.</b> Bodenrichtwerte © Hessisches Landesamt für Bodenmanagement und Geoinformation / Gutachterausschuss Frankfurt am Main (BORIS Hessen, <a href="https://www.govdata.de/dl-de/zero-2-0">dl-de/zero-2-0</a>). Landsat 8/9 Collection 2 Level-2 courtesy of the U.S. Geological Survey, via Microsoft Planetary Computer. Basemap © <a href="https://carto.com/attribution">CARTO</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</p>
+      <p><b>Data &amp; licences.</b> Bodenrichtwerte © Hessisches Landesamt für Bodenmanagement und Geoinformation / Gutachterausschuss Frankfurt am Main (BORIS Hessen, <a href="https://www.govdata.de/dl-de/zero-2-0">dl-de/zero-2-0</a>). Landsat 8/9 Collection 2 Level-2 courtesy of the U.S. Geological Survey, via Microsoft Planetary Computer. 3D buildings: 3D-Gebäudemodelle LoD2 © HVBG Hessen (Geodaten online, free download). Basemap © <a href="https://carto.com/attribution">CARTO</a>, © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</p>
       <p>Barış Parlatangiller · <a href="https://github.com/barisparlatangiller" id="repoLink">source &amp; method</a> · built with AI assistance (Claude, Anthropic)</p>
     </footer>
   </aside>
 </div>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
