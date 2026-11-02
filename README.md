@@ -57,7 +57,7 @@ None of these studies validates the M1–M4 coefficients; they are transparent a
 ## Data quality and limits
 
 - **How 2022 and 2024 are matched:** by zone number and land-use code to the 2026 zones. The 2022/2024 BORIS exports are attribute tables, so boundary changes between years are **not verified**.
-- **Coverage:** a 2022 value is matched for about 920 zones, a 2024 value for about 1,320 (see `stats.json`).
+- **Coverage:** a growth rate 2022–26 can be computed for 820 zones (2024–26: 1,321) (see `stats.json`).
 - **Two value records:** 42 polygons carry two records; they are averaged, and both values are shown in the popup.
 - **Symbolic values:** values below 1 €/m² (0.01 €/m² on public land) are excluded from growth statistics.
 - **Heat:** land-surface temperature is the temperature of surfaces around 10:30 on clear days, not air temperature. Hot zones are mostly dense and central, so heat and location overlap.

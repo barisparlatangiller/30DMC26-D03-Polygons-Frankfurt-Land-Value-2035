@@ -68,13 +68,23 @@ def main():
 
     y0, y1 = [int(x) for x in a.years.split("-")]
     lon_lat = transform_bounds(CRS, "EPSG:4326", *BBOX)
-    cat = pystac_client.Client.open("https://planetarycomputer.microsoft.com/api/stac/v1",
-                                    modifier=planetary_computer.sign_inplace)
+    import time
+
+    def retry(fn, tries=6):
+        for k in range(tries):
+            try:
+                return fn()
+            except Exception as e:                       # the STAC API sometimes resets a connection
+                print(f"  STAC request failed ({e.__class__.__name__}), retry {k + 1}/{tries}", flush=True)
+                time.sleep(10 * (k + 1))
+        raise RuntimeError("Planetary Computer STAC not reachable")
+
+    cat = retry(lambda: pystac_client.Client.open("https://planetarycomputer.microsoft.com/api/stac/v1",
+                                                  modifier=planetary_computer.sign_inplace))
     items = []
     for y in range(y0, y1 + 1):
-        s = cat.search(collections=["landsat-c2-l2"], bbox=lon_lat, datetime=f"{y}-06-01/{y}-08-31",
-                       query={"eo:cloud_cover": {"lt": 20}, "platform": {"in": ["landsat-8", "landsat-9"]}})
-        items += list(s.items())
+        items += retry(lambda: list(cat.search(collections=["landsat-c2-l2"], bbox=lon_lat, datetime=f"{y}-06-01/{y}-08-31",
+                                               query={"eo:cloud_cover": {"lt": 20}, "platform": {"in": ["landsat-8", "landsat-9"]}}).items()))
     items.sort(key=lambda i: i.properties.get("eo:cloud_cover", 100))
     print(f"Landsat scenes found: {len(items)}", flush=True)
 
