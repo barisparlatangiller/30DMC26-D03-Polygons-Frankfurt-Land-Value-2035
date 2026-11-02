@@ -22,7 +22,7 @@
   const state = { year: 2026, model: "m3", u: 2, p: "50", hadj: 0, grp: "all", col: "value", view: "2d", heat: false, opac: 0.85, sel: null };
   let map, Z, S, HEAT = null, popup, playing = null;
 
-  const j = (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(u + " " + r.status); return r.json(); });
+  const j = (u) => fetch(u, { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(u + " " + r.status); return r.json(); });
   Promise.all([j("data/zones.geojson"), j("data/stats.json"), j("data/heat.json").catch(() => null)]).then(([z, s, h]) => {
     Z = z; S = s; HEAT = h && h.corners ? h : null;
     initMap(); initPanel();
@@ -117,11 +117,10 @@
       map.addLayer({ id: "zf", type: "fill", source: "z", paint: { "fill-color": colorExpr(), "fill-opacity": state.opac } });
       map.addLayer({ id: "zl", type: "line", source: "z", paint: { "line-color": dark ? "#111" : "#fff",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.2, 14, 1], "line-opacity": 0.7 } });
-      if (S.buildings) map.addSource("bld", { type: "vector", url: "pmtiles://" + new URL("data/buildings.pmtiles", location.href).href });
-      else map.addSource("bld", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer(Object.assign({ id: "b3", type: "fill-extrusion", source: "bld", minzoom: 12, layout: { visibility: "none" },
+      map.addSource("bld", { type: "vector", url: "pmtiles://" + new URL("data/buildings.pmtiles", location.href).href });
+      map.addLayer({ id: "b3", type: "fill-extrusion", source: "bld", "source-layer": "b", minzoom: 12, layout: { visibility: "none" },
         paint: { "fill-extrusion-color": colorExpr(true), "fill-extrusion-height": ["get", "h"], "fill-extrusion-base": 0,
-                 "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } }, S.buildings ? { "source-layer": "b" } : {}));
+                 "fill-extrusion-opacity": 0.92, "fill-extrusion-vertical-gradient": true } });
       map.addLayer({ id: "zh", type: "line", source: "z", filter: ["==", ["get", "i"], -1],
         paint: { "line-color": dark ? "#fff" : "#1f1d1a", "line-width": 2.5 } });
       labels.forEach((id) => map.moveLayer(id));
