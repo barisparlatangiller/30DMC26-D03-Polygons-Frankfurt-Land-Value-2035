@@ -64,27 +64,39 @@ def main():
     ap.add_argument("--web", default="docs/data")
     ap.add_argument("--max-scenes", type=int, default=30)
     a = ap.parse_args()
-    import pystac_client, planetary_computer
+    import planetary_computer
 
     y0, y1 = [int(x) for x in a.years.split("-")]
     lon_lat = transform_bounds(CRS, "EPSG:4326", *BBOX)
-    import time
+    import time, requests
+    from types import SimpleNamespace
+    from datetime import datetime
 
-    def retry(fn, tries=6):
+    def retry(fn, tries=8):
         for k in range(tries):
             try:
                 return fn()
             except Exception as e:                       # the STAC API sometimes resets a connection
-                print(f"  STAC request failed ({e.__class__.__name__}), retry {k + 1}/{tries}", flush=True)
-                time.sleep(10 * (k + 1))
+                print(f"  STAC request failed ({e.__class__.__name__}: {str(e)[:80]}), retry {k + 1}/{tries}", flush=True)
+                time.sleep(15 * (k + 1))
         raise RuntimeError("Planetary Computer STAC not reachable")
 
-    cat = retry(lambda: pystac_client.Client.open("https://planetarycomputer.microsoft.com/api/stac/v1",
-                                                  modifier=planetary_computer.sign_inplace))
+    def search(y):
+        body = {"collections": ["landsat-c2-l2"], "bbox": list(lon_lat), "limit": 100,
+                "datetime": f"{y}-06-01T00:00:00Z/{y}-08-31T23:59:59Z",
+                "query": {"eo:cloud_cover": {"lt": 20}, "platform": {"in": ["landsat-8", "landsat-9"]}}}
+        r = requests.post("https://planetarycomputer.microsoft.com/api/stac/v1/search", json=body, timeout=120)
+        r.raise_for_status()
+        out = []
+        for f in r.json()["features"]:
+            assets = {k: SimpleNamespace(href=planetary_computer.sign_url(f["assets"][k]["href"])) for k in ("lwir11", "qa_pixel")}
+            out.append(SimpleNamespace(id=f["id"], properties=f["properties"], assets=assets,
+                                       datetime=datetime.fromisoformat(f["properties"]["datetime"].replace("Z", "+00:00"))))
+        return out
+
     items = []
     for y in range(y0, y1 + 1):
-        items += retry(lambda: list(cat.search(collections=["landsat-c2-l2"], bbox=lon_lat, datetime=f"{y}-06-01/{y}-08-31",
-                                               query={"eo:cloud_cover": {"lt": 20}, "platform": {"in": ["landsat-8", "landsat-9"]}}).items()))
+        items += retry(lambda: search(y))
     items.sort(key=lambda i: i.properties.get("eo:cloud_cover", 100))
     print(f"Landsat scenes found: {len(items)}", flush=True)
 
